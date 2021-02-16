@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+# 1. INPUT ARGUMENTS
+layers_dir=$1
+
+# 2. EXTRACT JAR
+echo "---> Extracting jar"
+
+if [[ -z ${MODULE} ]]; then
+  echo "MODULE unset - failing"
+  exit 1
+else
+  echo "MODULE=${MODULE}"
+  java -Djarmode=layertools -jar /workspace/${MODULE}/target/${MODULE}-*.jar extract
+
+  # Symlink directories so that they will be found in CNB_APP_DIR (working directory at runtime)
+  ln -s /workspace/${MODULE}/target/dependencies ./dependencies
+  ln -s /workspace/${MODULE}/target/spring-boot-loader ./spring-boot-loader
+  ln -s /workspace/${MODULE}/target/snapshot-dependencies ./snapshot-dependencies
+  ln -s /workspace/${MODULE}/target/application ./application
+fi
+
+# 3. INSTALL DOCKERIZE
+echo "---> Installing dockerize"
+
+dockerize_layer_dir=${layers_dir}/dockerize
+
+if [[ -f ${dockerize_layer_dir}/dockerize ]] ; then
+  echo "Blindly restoring from cache" # TODO: check urls
+else
+  mkdir -p $dockerize_layer_dir
+  if [[ -z ${DOCKERIZE_VERSION} ]]; then
+    DOCKERIZE_VERSION="v0.6.1"
+  fi
+  wget -O $dockerize_layer_dir/dockerize.tar.gz https://github.com/jwilder/dockerize/releases/download/${DOCKERIZE_VERSION}/dockerize-alpine-linux-amd64-${DOCKERIZE_VERSION}.tar.gz
+  tar xzf $dockerize_layer_dir/dockerize.tar.gz
+
+  echo "directory contents"
+  ls /layers/samples_bash-script/dockerize
+
+  chmod +x $dockerize_layer_dir/dockerize
+
+  cat > "${dockerize_layer_dir}.toml" << EOF
+launch = true
+cache = true
+
+[metadata]
+EOF
+fi
+
+# Make dockerize available
+lf -s $dockerize_layer_dir/dockerize
+
+# 4. SET RUNTIME ENV
+mkdir -p "$layersdir/env"
+echo -n "docker" > "$layersdir/env/SPRING_PROFILES_ACTIVE"
+
+# 5. SET DEFAULT PROCESS
+cat > "$layersdir/launch.toml" <<EOL
+[[processes]]
+type = "dockerize"
+command = "dockerize"
+args = ["-timeout=60s","--","java", "org.springframework.boot.loader.JarLauncher"]
+EOL

@@ -88,7 +88,15 @@ MAVEN_OPTS="${MAVEN_OPTS:-"-XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemory
 
 if [[ -x mvnw ]]; then
   echo "---> Running Maven Wrapper"
-  ./mvnw clean install -B -DskipTests
+  if [[ -z ${MODULE} ]]; then
+    echo "MODULE unset"
+    ./mvnw clean install -B -DskipTests
+  else
+    echo "MODULE=${MODULE}"
+    ./mvnw -pl ${MODULE} clean install -B -DskipTests
+  fi
+
+
 else
   maven_layer_dir=${layers_dir}/maven
   if [[ -f ${layers_dir}/maven.toml ]]; then
@@ -112,7 +120,13 @@ EOF
   export PATH="${PATH}:${layers_dir}/maven/bin"
 
   echo "---> Running Maven"
-  mvn clean install -B -DskipTests
+  if [[ -z ${MODULE} ]]; then
+    echo "MODULE unset"
+    mvn clean install -B -DskipTests
+  else
+    echo "MODULE=${MODULE}"
+    mvn -pl ${MODULE} clean install -B -DskipTests
+  fi
 fi
 
 # 6. SET DEFAULT START COMMAND
