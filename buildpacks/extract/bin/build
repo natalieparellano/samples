@@ -12,13 +12,15 @@ if [[ -z ${MODULE} ]]; then
   exit 1
 else
   echo "MODULE=${MODULE}"
+
+  # Extract jar to /workspace (working directory)
   java -Djarmode=layertools -jar /workspace/${MODULE}/target/${MODULE}-*.jar extract
 
-  # Symlink directories so that they will be found in CNB_APP_DIR (working directory at runtime)
-  ln -s /workspace/${MODULE}/target/dependencies ./dependencies
-  ln -s /workspace/${MODULE}/target/spring-boot-loader ./spring-boot-loader
-  ln -s /workspace/${MODULE}/target/snapshot-dependencies ./snapshot-dependencies
-  ln -s /workspace/${MODULE}/target/application ./application
+  # Copy contents of sub-dirs to /workspace (working directory at runtime)
+  cp -r /workspace/dependencies/* /workspace
+  cp -r /workspace/spring-boot-loader/* /workspace
+  # cp -r /workspace/snapshot-dependencies/* /workspace # Nothing in the directory for this app
+  cp -r /workspace/application/* /workspace
 fi
 
 # 3. INSTALL DOCKERIZE
@@ -30,14 +32,16 @@ if [[ -f ${dockerize_layer_dir}/dockerize ]] ; then
   echo "Blindly restoring from cache" # TODO: check urls
 else
   mkdir -p $dockerize_layer_dir
+
+  # Download dockerize
   if [[ -z ${DOCKERIZE_VERSION} ]]; then
     DOCKERIZE_VERSION="v0.6.1"
   fi
   wget -O $dockerize_layer_dir/dockerize.tar.gz https://github.com/jwilder/dockerize/releases/download/${DOCKERIZE_VERSION}/dockerize-alpine-linux-amd64-${DOCKERIZE_VERSION}.tar.gz
   tar xzf $dockerize_layer_dir/dockerize.tar.gz -C $dockerize_layer_dir
-
   chmod +x $dockerize_layer_dir/dockerize
 
+  # Set layer types
   cat > "${dockerize_layer_dir}.toml" << EOF
 launch = true
 cache = true
@@ -46,17 +50,23 @@ cache = true
 EOF
 fi
 
-# Make dockerize available
-ln -s $dockerize_layer_dir/dockerize dockerize
-
 # 4. SET RUNTIME ENV
-mkdir -p "$layers_dir/env"
-echo -n "docker" > "$layers_dir/env/SPRING_PROFILES_ACTIVE"
+mkdir -p "$dockerize_layer_dir/env"
+
+# Add dockerize to PATH
+echo -n $dockerize_layer_dir > "$dockerize_layer_dir/env/PATH.prepend"
+echo -n ":" > "$dockerize_layer_dir/env/PATH.delim"
+
+# Set SPRING_PROFILES_ACTIVE
+echo -n "docker" > "$dockerize_layer_dir/env/SPRING_PROFILES_ACTIVE"
 
 # 5. SET DEFAULT PROCESS
 cat > "$layers_dir/launch.toml" <<EOL
 [[processes]]
 type = "dockerize"
-command = "dockerize"
-args = ["-timeout=60s","--","java", "org.springframework.boot.loader.JarLauncher"]
+command = "dockerize -- java org.springframework.boot.loader.JarLauncher"
+
+[[processes]]
+type = "list-env"
+command = "env"
 EOL
