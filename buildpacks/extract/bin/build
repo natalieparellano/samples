@@ -34,10 +34,7 @@ else
     DOCKERIZE_VERSION="v0.6.1"
   fi
   wget -O $dockerize_layer_dir/dockerize.tar.gz https://github.com/jwilder/dockerize/releases/download/${DOCKERIZE_VERSION}/dockerize-alpine-linux-amd64-${DOCKERIZE_VERSION}.tar.gz
-  tar xzf $dockerize_layer_dir/dockerize.tar.gz
-
-  echo "directory contents"
-  ls /layers/samples_bash-script/dockerize
+  tar xzf $dockerize_layer_dir/dockerize.tar.gz -C $dockerize_layer_dir
 
   chmod +x $dockerize_layer_dir/dockerize
 
@@ -50,14 +47,14 @@ EOF
 fi
 
 # Make dockerize available
-lf -s $dockerize_layer_dir/dockerize
+ln -s $dockerize_layer_dir/dockerize dockerize
 
 # 4. SET RUNTIME ENV
-mkdir -p "$layersdir/env"
-echo -n "docker" > "$layersdir/env/SPRING_PROFILES_ACTIVE"
+mkdir -p "$layers_dir/env"
+echo -n "docker" > "$layers_dir/env/SPRING_PROFILES_ACTIVE"
 
 # 5. SET DEFAULT PROCESS
-cat > "$layersdir/launch.toml" <<EOL
+cat > "$layers_dir/launch.toml" <<EOL
 [[processes]]
 type = "dockerize"
 command = "dockerize"
